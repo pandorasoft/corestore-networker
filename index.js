@@ -11,6 +11,7 @@ class CorestoreNetworker extends Nanoresource {
   constructor (corestore, opts = {}) {
     super()
     this.corestore = corestore
+    
     this.opts = opts
     this.keyPair = opts.keyPair || HypercoreProtocol.keyPair()
 
@@ -38,13 +39,21 @@ class CorestoreNetworker extends Nanoresource {
     this.setMaxListeners(0)
   }
 
-  _replicate (protocolStream) {
-    // The initiator parameter here is ignored, since we're passing in a stream.
-    this.corestore.replicate(false, {
-      ...this._replicationOpts,
-      stream: protocolStream
-    })
-  }
+  // _replicate (protocolStream) {
+  //   // v10
+  //   // The initiator parameter here is ignored, since we're passing in a stream.
+  //   // this.corestore.replicate(false, {
+  //   //   ...this._replicationOpts,
+  //   //   stream: protocolStream
+  //   // })
+
+  //   // v9
+  //   // The initiator parameter here is ignored, since we're passing in a stream.
+  //   // this.corestore.replicate({
+  //   //   ...this._replicationOpts,
+  //   //   stream: protocolStream
+  //   // })
+  // }
 
   async _flush (keyString, keyBuf) {
     await new Promise((resolve, reject) => {
@@ -120,7 +129,7 @@ class CorestoreNetworker extends Nanoresource {
   }
 
   _addStream (stream) {
-    this._replicate(stream)
+    // this._replicate(stream)
     this.streams.add(stream)
 
     const peer = intoPeer(stream)
@@ -160,13 +169,15 @@ class CorestoreNetworker extends Nanoresource {
       var finishedHandshake = false
       var processed = false
 
-      const protocolStream = new HypercoreProtocol(isInitiator, { ...this._replicationOpts })
+      // const protocolStreamShadow = new HypercoreProtocol(isInitiator, { ...this._replicationOpts })
+      const protocolStream = this.corestore.replicate({...this._replicationOpts });
       protocolStream.on('handshake', () => {
-        const deduped = info.deduplicate(protocolStream.publicKey, protocolStream.remotePublicKey)
-        if (!deduped) {
+        // const deduped = info.deduplicate(protocolStream.publicKey, protocolStream.remotePublicKey)
+        // const deduped = info.deduplicate(protocolStream.id, protocolStream.remoteId)
+        // if (!deduped) {
           finishedHandshake = true
           self._addStream(protocolStream)
-        }
+        // }
         if (!processed) {
           processed = true
           this._streamsProcessed++
