@@ -8,21 +8,23 @@ const maybe = require('call-me-maybe')
 const STREAM_PEER = Symbol('networker-stream-peer')
 
 class CorestoreNetworker extends Nanoresource {
-  constructor (corestore, opts = {}) {
+  constructor (corestore, opts = {},replicateOpts = {},isV10 = false) {
     super()
     this.corestore = corestore
     
     this.opts = opts
     this.keyPair = opts.keyPair || HypercoreProtocol.keyPair()
 
-    this._replicationOpts = {
+    this._replicationOpts = Object.assign({
       encrypt: true,
       live: true,
       keyPair: this.keyPair
-    }
+    },replicateOpts)
 
     this.streams = new Set()
     this.peers = new Set()
+
+    this._isV10 = isV10;
 
     this._joined = new Set()
     this._flushed = new Set()
@@ -37,23 +39,16 @@ class CorestoreNetworker extends Nanoresource {
     this.swarm = null
 
     this.setMaxListeners(0)
+
   }
 
-  // _replicate (protocolStream) {
-  //   // v10
-  //   // The initiator parameter here is ignored, since we're passing in a stream.
-  //   // this.corestore.replicate(false, {
-  //   //   ...this._replicationOpts,
-  //   //   stream: protocolStream
-  //   // })
-
-  //   // v9
-  //   // The initiator parameter here is ignored, since we're passing in a stream.
-  //   // this.corestore.replicate({
-  //   //   ...this._replicationOpts,
-  //   //   stream: protocolStream
-  //   // })
-  // }
+  _replicate (protocolStream) {
+    // The initiator parameter here is ignored, since we're passing in a stream.
+    this.corestore.replicate(false, {
+      ...this._replicationOpts,
+      stream: protocolStream
+    })
+  }
 
   async _flush (keyString, keyBuf) {
     await new Promise((resolve, reject) => {
@@ -129,7 +124,7 @@ class CorestoreNetworker extends Nanoresource {
   }
 
   _addStream (stream) {
-    // this._replicate(stream)
+    this._isV10 && this._replicate(stream)
     this.streams.add(stream)
 
     const peer = intoPeer(stream)
@@ -140,6 +135,7 @@ class CorestoreNetworker extends Nanoresource {
 
     this.emit('peer-add', peer)
     this.emit('handshake', stream)
+
   }
 
   _removeStream (stream) {
@@ -164,20 +160,31 @@ class CorestoreNetworker extends Nanoresource {
     this.swarm.on('error', err => this.emit('error', err))
     this.swarm.on('connection', (socket, info) => {
       const isInitiator = !!info.client
+      console.log(socket.remoteAddress);
       if (socket.remoteAddress === '::ffff:127.0.0.1' || socket.remoteAddress === '127.0.0.1') return null
 
       var finishedHandshake = false
       var processed = false
 
-      // const protocolStreamShadow = new HypercoreProtocol(isInitiator, { ...this._replicationOpts })
-      const protocolStream = this.corestore.replicate({...this._replicationOpts });
+      let protocolStream;
+      if(this._isV10){
+        protocolStream = new HypercoreProtocol(isInitiator, { ...this._replicationOpts })
+      }else{
+        protocolStream = this.corestore.replicate({...this._replicationOpts });
+      }
+
       protocolStream.on('handshake', () => {
-        // const deduped = info.deduplicate(protocolStream.publicKey, protocolStream.remotePublicKey)
-        // const deduped = info.deduplicate(protocolStream.id, protocolStream.remoteId)
-        // if (!deduped) {
+        let deduped;
+        if(this._isV10){
+          deduped = info.deduplicate(protocolStream.publicKey, protocolStream.remotePublicKey)
+        }else{
+          deduped = info.deduplicate(protocolStream.id, protocolStream.remoteId)
+        }
+        
+        if (!deduped) {
           finishedHandshake = true
-          self._addStream(protocolStream)
-        // }
+          self._addStream(protocolStream);
+        }
         if (!processed) {
           processed = true
           this._streamsProcessed++
