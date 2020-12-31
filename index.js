@@ -160,7 +160,6 @@ class CorestoreNetworker extends Nanoresource {
     this.swarm.on('error', err => this.emit('error', err))
     this.swarm.on('connection', (socket, info) => {
       const isInitiator = !!info.client
-      console.log(socket.remoteAddress);
       if (socket.remoteAddress === '::ffff:127.0.0.1' || socket.remoteAddress === '127.0.0.1') return null
 
       var finishedHandshake = false
